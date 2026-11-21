@@ -1,23 +1,12 @@
 name: probe-sources
 on:
   push:
-    paths: ['.github/workflows/probe.yml']
+    paths: ['.github/workflows/probe.yml','.github/probe/**']
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - shell: bash {0}
-        run: |
-          H(){ echo "=== $1"; curl -sSL -m 12 -D - -o body -H 'Origin: https://james.fish' -r 0-2000 "$1" 2>&1 | grep -iE '^(HTTP|access-control-allow-origin|content-type|location|curl)'; head -c ${2:-0} body; echo; }
-          H "https://de1.api.radio-browser.info/json/stations/search?tag=talk&limit=3&hidebroken=true&is_https=true" 600
-          H "https://all.api.radio-browser.info/json/servers" 300
-          U=$(curl -s "https://de1.api.radio-browser.info/json/stations/search?limit=40&hidebroken=true&is_https=true&order=random" | python3 -c "import json,sys;[print(s['url_resolved']) for s in json.load(sys.stdin)]")
-          echo "=== radio stream CORS sample"; n=0; c=0; for u in $U; do n=$((n+1)); curl -s -m 5 -D - -o /dev/null -H 'Origin: https://james.fish' "$u" 2>/dev/null | grep -qi 'access-control-allow-origin' && c=$((c+1)); done; echo "$c of $n https stations send CORS"
-          H "https://archive.org/advancedsearch.php?q=collection%3Aoldtimeradio+AND+mediatype%3Aaudio&fl%5B%5D=identifier&rows=3&page=7&output=json" 400
-          H "https://archive.org/metadata/OTRR_Dimension_X_Singles" 0
-          F=$(curl -s https://archive.org/metadata/OTRR_Dimension_X_Singles | python3 -c "import json,sys;d=json.load(sys.stdin);print([f['name'] for f in d['files'] if f['name'].endswith('.mp3')][0])")
-          H "https://archive.org/download/OTRR_Dimension_X_Singles/$F" 0
-          H "https://www.loc.gov/audio/?fo=json&c=3&q=speech" 300
-          H "https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrsearch=filetype%3Aaudio%20chant&gsrlimit=3&prop=imageinfo&iiprop=url%7Cextmetadata%7Cmime" 900
-          H "https://upload.wikimedia.org/wikipedia/commons/2/21/Gregorian_chant.ogg" 0
-          H "https://freesound.org/apiv2/search/text/?query=rain" 200
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: node .github/probe/test.mjs

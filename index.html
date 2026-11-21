@@ -38,6 +38,9 @@ select,input{min-height:44px;border-radius:10px;border:2px solid var(--line);bac
 input[type=number]{width:84px}
 textarea{width:100%;min-height:120px;border-radius:10px;border:2px solid var(--line);background:var(--card);padding:10px}
 label{font-size:14px;color:var(--mut);display:flex;gap:6px;align-items:center}
+.src{border-top:1px solid var(--line);padding:10px 0}.src label{color:var(--ink);font-size:16px}.src input:not([type=checkbox]){width:100%;margin-top:6px}.src textarea{margin-top:6px}
+#yt iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:10px;margin-top:10px}
+.now a{color:inherit}
 .takes{list-style:none;padding:0;margin:0}
 .takes li{background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:8px}
 .takes .nm{font-size:13px;overflow-wrap:anywhere}
@@ -51,11 +54,12 @@ summary{cursor:pointer;font-weight:600;min-height:28px}
 <body>
 <main>
 <h1>Spin &amp; Sample</h1>
-<div class="mut">Random live streams. Grab the last few bars as a WAV for your Octatrack, Tonverk or Loopy Pro.</div>
+<div class="mut">Random live streams, radio and archives. Grab the last few bars as a WAV for your Octatrack, Tonverk or Loopy Pro.</div>
 
 <div class="dialwrap"><button id="spin" aria-label="Spin to a random source">SPIN<span id="ring"></span></button></div>
 
 <div class="now" id="now"><b>Not playing</b><span class="mut">Tap SPIN. The first tap also turns on audio.</span></div>
+<div id="yt"></div>
 <div id="msg" role="status"></div>
 
 <h2>Grab</h2>
@@ -83,10 +87,16 @@ summary{cursor:pointer;font-weight:600;min-height:28px}
 <ul class="takes" id="takes"><li class="mut">No takes yet.</li></ul>
 <div class="row"><button id="credits">Copy credits log</button></div>
 
-<details>
+<details id="srcbox">
 <summary>Sources</summary>
-<p class="mut">The Locus Sonus open-mic list loads live. Add your own streams below, one per line: <code>name | https-url | note</code>. Any stream works. Ones whose server allows browser access can be recorded here; the rest play only, so sample those on the Tonverk over USB. Plain http streams won't play on this https page.</p>
-<textarea id="custom" placeholder="Late-night radio | https://example.org/live.mp3 | note"></textarea>
+<p class="mut">Each spin picks one ticked pool at random. Search fields take comma-separated terms, one picked at random per spin; leave blank for random words.</p>
+<div class="src"><label><input type="checkbox" id="c_locus"> <b>Locus Sonus</b> open mics</label><div class="mut">Live ambience from about 35 places. Recordable.</div></div>
+<div class="src"><label><input type="checkbox" id="c_radio"> <b>Radio Browser</b> live internet radio</label><input id="q_radio" placeholder="tags, e.g. talk, religious, shortwave, news"><div class="mut">Random https stations. Most are recordable.</div></div>
+<div class="src"><label><input type="checkbox" id="c_archive"> <b>Internet Archive</b> audio</label><input id="q_archive" placeholder="collection:oldtimeradio"><div class="mut">Any archive.org search. Starts at a random point. Recordable. Try collection:georgeblood (78s), collection:audio_religion, subject:speech.</div></div>
+<div class="src"><label><input type="checkbox" id="c_commons"> <b>Wikimedia Commons</b> audio</label><input id="q_commons" placeholder="chant, speech, field recording"><div class="mut">Freely licensed files. Recordable.</div></div>
+<div class="src"><label><input type="checkbox" id="c_fs"> <b>Freesound</b>, CC0 only</label><input id="q_fs" placeholder="search terms"><input id="k_fs" placeholder="Freesound API key" autocomplete="off"><div class="mut">Free key at freesound.org/apiv2/apply.</div></div>
+<div class="src"><label><input type="checkbox" id="c_yt"> <b>YouTube</b>, Creative Commons only</label><input id="q_yt" placeholder="search terms"><input id="k_yt" placeholder="YouTube Data API key" autocomplete="off"><div class="mut">Starts at a random point. Play only: YouTube can't be recorded in a browser, so sample it on the Tonverk over USB. About 100 spins a day on the free quota.</div></div>
+<div class="src"><label><input type="checkbox" id="c_custom"> <b>My streams</b></label><textarea id="custom" placeholder="Late-night radio | https://example.org/live.mp3 | note"></textarea><div class="mut">One per line: <code>name | https-url | note</code>. Plain http streams won't play on this https page.</div></div>
 <div class="row"><button id="savecustom">Save sources</button><span class="mut" id="srccount"></span></div>
 </details>
 
@@ -109,9 +119,9 @@ let sources=[],takes=[],log=[];
 
 function say(t){$('msg').textContent=t}
 function setNow(s,capture,extra){
-  $('now').innerHTML=s?`<b>${esc(s.name)}</b><span class="mut">${esc(s.credit||'')}</span><br>`+
+  $('now').innerHTML=s?`<b>${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.name)}</a>`:esc(s.name)}</b><span class="mut">${esc(s.credit||'')}</span><br>`+
     `<span class="tag">${esc(s.license||'no license info')}</span>`+
-    (capture?'<span class="tag">recordable</span>':'<span class="tag warn">play only (no CORS)</span>')+(extra||''):'<b>Not playing</b>';
+    (capture?'<span class="tag">recordable</span>':'<span class="tag warn">play only: sample on the Tonverk</span>')+(extra||''):'<b>Not playing</b>';
   $('grab').disabled=!capture;$('rec').disabled=!capture;
 }
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -139,61 +149,133 @@ function meter(){
     $('ring').style.opacity=Math.min(1,p/60).toFixed(2);requestAnimationFrame(tick)};tick();
 }
 
+const WORDS=['rain','night','voice','choir','sea','city','market','prayer','train','wind','bells','speech','radio','forest','storm','machine','birds','drums','church','harbor','interview','lecture','poem','street','festival','organ','crowd','engine','water','song'];
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const terms=t=>String(t||'').split(',').map(x=>x.trim()).filter(Boolean);
+const term=t=>rnd(terms(t).length?terms(t):WORDS);
+const getJ=async u=>{const r=await fetch(u);if(!r.ok)throw new Error('HTTP '+r.status);return r.json()};
+const canOgg=document.createElement('audio').canPlayType('audio/ogg; codecs="vorbis"')!=='';
+const strip=h=>String(h||'').replace(/<[^>]*>/g,'').trim();
+const CFG_IDS=['c_locus','c_radio','c_archive','c_commons','c_fs','c_yt','c_custom','q_radio','q_archive','q_commons','q_fs','k_fs','q_yt','k_yt','custom'];
+let locusList=[];
+
+function loadCfg(){
+  let c={};try{c=JSON.parse(localStorage.getItem('spin_cfg')||'{}')}catch(e){}
+  if(!('c_locus' in c))c={c_locus:true,c_custom:true,custom:(()=>{try{return localStorage.getItem('kwel_custom')||''}catch(e){return ''}})()};
+  for(const id of CFG_IDS){const el=$(id);if(el.type==='checkbox')el.checked=!!c[id];else el.value=c[id]||''}
+}
+function saveCfg(){
+  const c={};for(const id of CFG_IDS){const el=$(id);c[id]=el.type==='checkbox'?el.checked:el.value}
+  try{localStorage.setItem('spin_cfg',JSON.stringify(c))}catch(e){}
+}
 async function loadLocus(){
   try{
-    const r=await fetch('https://locusonus.org/soundmap/list/',{cache:'no-store'});
-    const j=await r.json();
+    const j=await getJ('https://locusonus.org/soundmap/list/');
     const secure=location.protocol==='https:';
-    return j.filter(s=>s.url&&(!secure||s.url.startsWith('https:'))).map(s=>({
-      name:s.name+(s.country?' ('+s.country+')':''),url:s.url,type:s.ext==='ogg'?'ogg':'mpeg',
-      credit:'Locus Sonus open mic'+(s.artist?' by '+s.artist:'')+' (locusonus.org)',license:'Locus Sonus asks for a credit'}));
-  }catch(e){return []}
+    locusList=j.filter(s=>s.url&&(!secure||s.url.startsWith('https:'))&&(canOgg||s.ext!=='ogg')).map(s=>({
+      name:s.name+(s.country?' ('+s.country+')':''),url:s.url,kind:'live',link:'https://locusonus.org/soundmap/',
+      credit:'Locus Sonus open mic'+(s.artist?' by '+s.artist:''),license:'Locus Sonus asks for a credit'}));
+  }catch(e){locusList=[]}
+  $('srccount').textContent=locusList.length?`${locusList.length} Locus Sonus mics online`:'Locus Sonus list unavailable';
 }
-function loadCustom(){
-  let t='';try{t=localStorage.getItem('kwel_custom')||''}catch(e){}
-  $('custom').value=t;
-  return t.split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(p=>p[1]&&/^https?:/.test(p[1]))
-    .map(p=>({name:p[0]||p[1],url:p[1],license:p[2]||'no license info',credit:'Your source'}));
+function customList(){
+  return $('custom').value.split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(p=>p[1]&&/^https?:/.test(p[1]))
+    .map(p=>({name:p[0]||p[1],url:p[1],kind:'live',license:p[2]||'no license info',credit:'My stream'}));
 }
-async function buildSources(){
-  const a=document.createElement('audio');
-  const ogg=a.canPlayType('audio/ogg; codecs="vorbis"')!=='';
-  const locus=(await loadLocus()).filter(s=>ogg||!/ogg/.test(s.type));
-  sources=[...locus,...loadCustom()];
-  $('srccount').textContent=`${sources.length} sources (${locus.length} from Locus Sonus)`;
-  if(!locus.length)say('Couldn\'t load the Locus Sonus list (offline?). Add sources under "Sources".');
-}
+const PROVIDERS={
+  c_locus:async()=>{if(!locusList.length)await loadLocus();if(!locusList.length)throw new Error('Locus Sonus list unavailable');return rnd(locusList)},
+  c_custom:async()=>{const l=customList();if(!l.length)throw new Error('No streams under My streams');return rnd(l)},
+  c_radio:async()=>{
+    const t=terms($('q_radio').value);const p=new URLSearchParams({limit:60,hidebroken:'true',is_https:'true',order:'random'});
+    if(t.length)p.set('tag',rnd(t).toLowerCase());
+    const j=(await getJ('https://de1.api.radio-browser.info/json/stations/search?'+p)).filter(x=>(x.url_resolved||'').startsWith('https:'));
+    if(!j.length)throw new Error('No https stations for that tag');const s=rnd(j);
+    return {name:s.name.trim()+(s.countrycode?' ('+s.countrycode+')':''),url:s.url_resolved,kind:'live',link:s.homepage||'',
+      credit:'Radio station'+(s.tags?' · '+s.tags.split(',').slice(0,4).join(', '):''),license:'Broadcast'};
+  },
+  c_archive:async()=>{
+    const q=`(${$('q_archive').value.trim()||'collection:oldtimeradio'}) AND mediatype:audio`;
+    const base='https://archive.org/advancedsearch.php?output=json&fl[]=identifier&rows=1&q='+encodeURIComponent(q);
+    const n=(await getJ(base+'&page=1')).response.numFound;if(!n)throw new Error('Archive search found nothing');
+    const id=(await getJ(base+'&page='+(1+Math.floor(Math.random()*Math.min(n,9000))))).response.docs[0].identifier;
+    const m=await getJ('https://archive.org/metadata/'+encodeURIComponent(id));
+    const files=(m.files||[]).filter(f=>/\.mp3$/i.test(f.name));if(!files.length)throw new Error('No mp3 in '+id);
+    const f=rnd(files);
+    return {name:(m.metadata.title||id)+(files.length>1?' · '+(f.title||f.name):''),url:`https://archive.org/download/${encodeURIComponent(id)}/${f.name.split('/').map(encodeURIComponent).join('/')}`,
+      kind:'file',link:'https://archive.org/details/'+id,credit:'Internet Archive'+(m.metadata.creator?' · '+[].concat(m.metadata.creator)[0]:''),
+      license:m.metadata.licenseurl?(/publicdomain|zero/.test(m.metadata.licenseurl)?'Public domain / CC0':'CC: '+m.metadata.licenseurl.split('licenses/')[1]):'Archive item, rights vary'};
+  },
+  c_commons:async()=>{
+    const u='https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=50&gsrsearch='+
+      encodeURIComponent('filetype:audio '+term($('q_commons').value))+'&prop=imageinfo&iiprop=url%7Cextmetadata%7Cmime';
+    const pages=Object.values((await getJ(u)).query?.pages||{});if(!pages.length)throw new Error('Commons found nothing');
+    const p=rnd(pages),ii=p.imageinfo[0],em=ii.extmetadata||{};let url=ii.url.split('?')[0];
+    if(/ogg|opus|webm/.test(ii.mime)&&!canOgg){const m=url.match(/^(https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/)(\w\/\w\w\/)([^/]+)$/);if(m)url=m[1]+'transcoded/'+m[2]+m[3]+'/'+m[3]+'.mp3'}
+    return {name:p.title.replace(/^File:/,''),url,kind:'file',link:ii.descriptionurl,credit:'Wikimedia Commons'+(em.Artist?' · '+strip(em.Artist.value).slice(0,60):''),
+      license:em.LicenseShortName?em.LicenseShortName.value:'Free license'};
+  },
+  c_fs:async()=>{
+    const k=$('k_fs').value.trim();if(!k)throw new Error('Freesound needs an API key');
+    const p=new URLSearchParams({query:term($('q_fs').value),filter:'license:"Creative Commons 0" duration:[3 TO 900]',fields:'id,name,username,previews,url',page_size:50,token:k});
+    const r=(await getJ('https://freesound.org/apiv2/search/text/?'+p)).results||[];if(!r.length)throw new Error('Freesound found nothing');
+    const s=rnd(r);
+    return {name:s.name,url:s.previews['preview-hq-mp3'],kind:'file',link:s.url,credit:'Freesound · '+s.username,license:'CC0'};
+  },
+  c_yt:async()=>{
+    const k=$('k_yt').value.trim();if(!k)throw new Error('YouTube needs an API key');
+    const p=new URLSearchParams({part:'snippet',type:'video',videoLicense:'creativeCommon',videoEmbeddable:'true',maxResults:50,q:term($('q_yt').value),key:k});
+    const items=(await getJ('https://www.googleapis.com/youtube/v3/search?'+p)).items||[];if(!items.length)throw new Error('YouTube found nothing');
+    const v=rnd(items),id=v.id.videoId;
+    const d=(await getJ(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${id}&key=${encodeURIComponent(k)}`)).items?.[0]?.contentDetails?.duration||'';
+    const m=d.match(/(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)||[];const dur=(+m[1]||0)*3600+(+m[2]||0)*60+(+m[3]||0);
+    const start=Math.floor(Math.random()*Math.max(0,dur-30));
+    const txt=document.createElement('textarea');txt.innerHTML=v.snippet.title;
+    return {name:txt.value,id,start,kind:'youtube',link:`https://youtu.be/${id}?t=${start}`,credit:'YouTube · '+v.snippet.channelTitle,license:'Creative Commons (YouTube: CC BY)'};
+  }
+};
+const NAMES={c_locus:'Locus Sonus',c_custom:'My streams',c_radio:'Radio Browser',c_archive:'Internet Archive',c_commons:'Wikimedia Commons',c_fs:'Freesound',c_yt:'YouTube'};
 
 function stopCur(){
   clearTimeout(stallT);
   if(curEl){curEl.pause();curEl.removeAttribute('src');curEl.load()}
   if(curNode){try{curNode.disconnect()}catch(e){}}
+  $('yt').innerHTML='';
   curEl=null;curNode=null;cur=null;
 }
 function play(s,tries){
   stopCur();cur=s;say('Tuning: '+s.name+' …');
+  if(s.kind==='youtube'){
+    $('yt').innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(s.id)}?start=${s.start}&autoplay=1&playsinline=1" allow="autoplay; encrypted-media" allowfullscreen title="YouTube"></iframe>`;
+    setNow(s,false);say('Tap play on the video if it doesn\'t start.');
+    log.push({t:new Date().toISOString(),name:s.name,url:s.link,license:s.license,action:'listened'});return;
+  }
   const tryOne=withCors=>{
     const el=new Audio();curEl=el;
     if(withCors)el.crossOrigin='anonymous';
     el.preload='auto';el.src=s.url;
-    let ok=false;
-    stallT=setTimeout(()=>{if(!ok){say(s.name+' isn\'t answering, so skipping.');spin(tries+1)}},9000);
-    el.onplaying=()=>{ok=true;clearTimeout(stallT);
+    let ok=false,seeked=false;
+    stallT=setTimeout(()=>{if(!ok){say(s.name+' isn\'t answering, so skipping.');spin(tries+1)}},12000);
+    el.onloadedmetadata=()=>{if(s.kind==='file'&&!seeked&&isFinite(el.duration)&&el.duration>45){seeked=true;el.currentTime=Math.random()*(el.duration-30)}};
+    el.onplaying=()=>{if(ok)return;ok=true;clearTimeout(stallT);
       if(withCors){curNode=ctx.createMediaElementSource(el);curNode.connect(gainNode)}
-      setNow(s,withCors);say('');log.push({t:new Date().toISOString(),name:s.name,url:s.url,license:s.license,action:'listened'});};
+      setNow(s,withCors);say('');log.push({t:new Date().toISOString(),name:s.name,url:s.link||s.url,license:s.license,action:'listened'});};
+    el.onended=()=>say('Reached the end of this file. Spin again.');
     el.onerror=()=>{clearTimeout(stallT);if(ok)return;
       if(withCors){tryOne(false)}else{say(s.name+' won\'t play in Safari, so skipping.');spin(tries+1)}};
     el.play().catch(()=>{});
   };
   tryOne(true);
 }
-function spin(tries=0){
+async function spin(tries=0){
   initAudio();if(ctx.state==='suspended')ctx.resume();
-  if(!sources.length){say('No sources yet. Add some under "Sources".');return}
-  if(tries>8){say('Nothing played after 8 tries. Check your connection or add sources.');return}
-  const pool=sources.filter(s=>s!==cur);const s=pool[Math.floor(Math.random()*pool.length)]||sources[0];
+  const on=Object.keys(PROVIDERS).filter(k=>$(k).checked);
+  if(!on.length){say('No sources ticked. Open "Sources" and tick at least one.');$('srcbox').open=true;return}
+  if(tries>8){say('Nothing played after 8 tries. Check your connection or your source settings.');return}
   const deg=360+Math.floor(Math.random()*360);$('spin').style.transform=`rotate(${deg}deg)`;
   setTimeout(()=>{$('spin').style.transform=''},600);
+  const k=rnd(on);say('Searching '+NAMES[k]+' …');
+  let s;try{s=await PROVIDERS[k]()}catch(e){say(NAMES[k]+': '+(e.message||e)+'. Trying another.');return setTimeout(()=>spin(tries+1),700)}
+  if(!s||(!s.url&&!s.id))return spin(tries+1);
   play(s,tries);
 }
 
@@ -277,8 +359,9 @@ $('credits').onclick=async()=>{
   const txt=log.map(l=>`${l.t}  ${l.action}  ${l.name}  ${l.url}  [${l.license}]${l.file?'  -> '+l.file:''}`).join('\n')||'Nothing logged yet.';
   try{await navigator.clipboard.writeText(txt);say('Credits log copied.')}catch(e){say('Clipboard blocked. Here it is:\n'+txt)}
 };
-$('savecustom').onclick=()=>{try{localStorage.setItem('kwel_custom',$('custom').value)}catch(e){}buildSources();say('Sources saved.')};
-buildSources();
+$('savecustom').onclick=()=>{saveCfg();say('Sources saved.')};
+for(const id of CFG_IDS)$(id).addEventListener('change',saveCfg);
+loadCfg();loadLocus();
 }
 </script>
 </body>
