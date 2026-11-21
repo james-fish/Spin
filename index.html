@@ -188,7 +188,7 @@ const PROVIDERS={
   c_radio:async()=>{
     const t=terms($('q_radio').value);const p=new URLSearchParams({limit:60,hidebroken:'true',is_https:'true',order:'random'});
     if(t.length)p.set('tag',rnd(t).toLowerCase());
-    const j=(await getJ('https://de1.api.radio-browser.info/json/stations/search?'+p)).filter(x=>(x.url_resolved||'').startsWith('https:'));
+    const j=(await getJ('https://de1.api.radio-browser.info/json/stations/search?'+p)).filter(x=>(x.url_resolved||'').startsWith('https:')&&!x.hls&&!/\.m3u8/i.test(x.url_resolved));
     if(!j.length)throw new Error('No https stations for that tag');const s=rnd(j);
     return {name:s.name.trim()+(s.countrycode?' ('+s.countrycode+')':''),url:s.url_resolved,kind:'live',link:s.homepage||'',
       credit:'Radio station'+(s.tags?' · '+s.tags.split(',').slice(0,4).join(', '):''),license:'Broadcast'};
