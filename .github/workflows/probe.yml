@@ -8,8 +8,16 @@ jobs:
     steps:
       - shell: bash {0}
         run: |
-          for u in https://locus.creacast.com:9001/status-json.xsl http://locus.creacast.com:9001/status-json.xsl http://locus.creacast.com:8000/status-json.xsl https://locus.creacast.com/status-json.xsl https://locusonus.org/soundmap/ https://locusonus.org/soundmap/list/ ; do
-            echo "=== $u"; curl -sS -m 15 -D - -o body -H 'Origin: https://james.fish' "$u" 2>&1 | grep -iE '^(HTTP|access-control|content-type|location|curl)' ; head -c 300 body 2>/dev/null; echo; rm -f body
+          curl -sS -m 15 https://locusonus.org/soundmap/list/ -o list.json
+          python3 - <<'P'
+          import json,collections
+          d=json.load(open('list.json'));print(len(d),'entries')
+          print(collections.Counter(x.get('ext') for x in d))
+          print(collections.Counter(x['url'].split('/')[2] for x in d))
+          print('keys',list(d[0].keys()))
+          for x in d[:60]: print(x['ext'],x['url'],'|',x['name'],'|',x.get('country'))
+          P
+          for ext in mp3 ogg; do
+            U=$(python3 -c "import json;print([x['url'] for x in json.load(open('list.json')) if x['ext']=='$ext'][0])" 2>/dev/null)
+            echo "=== $ext stream $U"; curl -sS -m 6 -D - -o /dev/null -H 'Origin: https://james.fish' "$U" 2>&1 | grep -iE '^(HTTP|access-control|content-type|curl)'
           done
-          echo "=== soundmap page stream refs"
-          curl -sS -m 15 https://locusonus.org/soundmap/ | grep -oE '(https?:)?//[^"'"'"' ]*(creacast|stream|\.json|api)[^"'"'"' ]*' | sort -u | head -30
