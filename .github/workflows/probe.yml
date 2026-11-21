@@ -1,0 +1,23 @@
+name: probe-sources
+on:
+  push:
+    paths: ['.github/workflows/probe.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "== status-json headers (with Origin)"
+          curl -sS -m 20 -D - -o status.json -H 'Origin: https://james.fish' https://locus.creacast.com:9001/status-json.xsl || echo FAIL
+          echo "== body head"; head -c 600 status.json; echo
+          echo "== mounts"
+          python3 -c "
+          import json;d=json.load(open('status.json'));s=d['icestats'].get('source',[]);s=s if isinstance(s,list) else [s]
+          print(len(s),'sources')
+          for x in s: print(x.get('listenurl'),'|',x.get('server_type'),'|',x.get('server_name'))
+          " || true
+          M=$(python3 -c "
+          import json;d=json.load(open('status.json'));s=d['icestats'].get('source',[]);s=s if isinstance(s,list) else [s]
+          print([x['listenurl'] for x in s if 'mpeg' in x.get('server_type','')][0].split('9001')[-1])" 2>/dev/null)
+          echo "== stream headers for $M"
+          curl -sS -m 8 -D - -o /dev/null -H 'Origin: https://james.fish' "https://locus.creacast.com:9001$M" || true
