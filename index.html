@@ -51,7 +51,7 @@ summary{cursor:pointer;font-weight:600;min-height:28px}
 <body>
 <main>
 <h1>Spin &amp; Sample</h1>
-<div class="mut">Random live open-mic streams. Grab the last few bars as a WAV for your Octatrack, Tonverk or Loopy Pro.</div>
+<div class="mut">Random live streams. Grab the last few bars as a WAV for your Octatrack, Tonverk or Loopy Pro.</div>
 
 <div class="dialwrap"><button id="spin" aria-label="Spin to a random source">SPIN<span id="ring"></span></button></div>
 
@@ -85,8 +85,8 @@ summary{cursor:pointer;font-weight:600;min-height:28px}
 
 <details>
 <summary>Sources</summary>
-<p class="mut">The Locus Sonus open-mic list loads live. Add your own streams below, one per line: <code>name | https-url | license</code>. Only https streams with CORS can be recorded here. The rest play only, so sample those on the Tonverk over USB.</p>
-<textarea id="custom" placeholder="My pond | https://example.org/pond.mp3 | CC0"></textarea>
+<p class="mut">The Locus Sonus open-mic list loads live. Add your own streams below, one per line: <code>name | https-url | note</code>. Any stream works. Ones whose server allows browser access can be recorded here; the rest play only, so sample those on the Tonverk over USB. Plain http streams won't play on this https page.</p>
+<textarea id="custom" placeholder="Late-night radio | https://example.org/live.mp3 | note"></textarea>
 <div class="row"><button id="savecustom">Save sources</button><span class="mut" id="srccount"></span></div>
 </details>
 
@@ -106,12 +106,11 @@ const BUF_SECS=90;
 let ctx=null,ring=null,ringLen=0,wpos=0,filled=0,sr=48000,an=null,gainNode=null;
 let cur=null,curEl=null,curNode=null,stallT=null,recording=false,recStart=0;
 let sources=[],takes=[],log=[];
-const locusBase='https://locus.creacast.com:9001';
 
 function say(t){$('msg').textContent=t}
 function setNow(s,capture,extra){
   $('now').innerHTML=s?`<b>${esc(s.name)}</b><span class="mut">${esc(s.credit||'')}</span><br>`+
-    `<span class="tag">${esc(s.license||'license unknown')}</span>`+
+    `<span class="tag">${esc(s.license||'no license info')}</span>`+
     (capture?'<span class="tag">recordable</span>':'<span class="tag warn">play only (no CORS)</span>')+(extra||''):'<b>Not playing</b>';
   $('grab').disabled=!capture;$('rec').disabled=!capture;
 }
@@ -142,21 +141,19 @@ function meter(){
 
 async function loadLocus(){
   try{
-    const r=await fetch(locusBase+'/status-json.xsl',{cache:'no-store'});
-    const j=await r.json();let src=j.icestats&&j.icestats.source;if(!src)return [];
-    if(!Array.isArray(src))src=[src];
-    return src.map(s=>{
-      const mount=(s.listenurl||'').replace(/^https?:\/\/[^/]+/,'');
-      return {name:s.server_name&&s.server_name!=='Unspecified name'?s.server_name:mount.replace('/',''),
-        url:locusBase+mount,type:s.server_type||'',credit:'Locus Sonus open mic (locusonus.org). Credit Locus Sonus when you use it.',license:'Open mic, credit Locus Sonus'}
-    }).filter(s=>s.url.length>locusBase.length);
+    const r=await fetch('https://locusonus.org/soundmap/list/',{cache:'no-store'});
+    const j=await r.json();
+    const secure=location.protocol==='https:';
+    return j.filter(s=>s.url&&(!secure||s.url.startsWith('https:'))).map(s=>({
+      name:s.name+(s.country?' ('+s.country+')':''),url:s.url,type:s.ext==='ogg'?'ogg':'mpeg',
+      credit:'Locus Sonus open mic'+(s.artist?' by '+s.artist:'')+' (locusonus.org)',license:'Locus Sonus asks for a credit'}));
   }catch(e){return []}
 }
 function loadCustom(){
   let t='';try{t=localStorage.getItem('kwel_custom')||''}catch(e){}
   $('custom').value=t;
   return t.split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(p=>p[1]&&/^https?:/.test(p[1]))
-    .map(p=>({name:p[0]||p[1],url:p[1],license:p[2]||'license unknown',credit:'Your source'}));
+    .map(p=>({name:p[0]||p[1],url:p[1],license:p[2]||'no license info',credit:'Your source'}));
 }
 async function buildSources(){
   const a=document.createElement('audio');
@@ -164,7 +161,7 @@ async function buildSources(){
   const locus=(await loadLocus()).filter(s=>ogg||!/ogg/.test(s.type));
   sources=[...locus,...loadCustom()];
   $('srccount').textContent=`${sources.length} sources (${locus.length} from Locus Sonus)`;
-  if(!locus.length)say('Couldn\'t load the Locus Sonus list here (CORS or offline). Add sources under "Sources".');
+  if(!locus.length)say('Couldn\'t load the Locus Sonus list (offline?). Add sources under "Sources".');
 }
 
 function stopCur(){
