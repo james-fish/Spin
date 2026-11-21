@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Spin &amp; Sample</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: quiet field-recorder, one big dial
+   IDEA: a radio scanner / field recorder you spin
+   PICTURE: the dial + live level ring
+   COLOUR and TYPE: ice ground, ink, one hot accent; Space Grotesk + Inter
+   LAYOUT: one column, dial first, grab controls under thumb */
+:root{color-scheme:light dark;--bg:light-dark(#dff1f7,#06222e);--ink:light-dark(#06222e,#dff1f7);--mut:light-dark(#3d6270,#8fb3c0);--card:light-dark(#ffffff,#0c3242);--hot:#ff2e7e;--line:light-dark(#b7d8e3,#164a5c)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+main{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font:700 28px/1.05 'Space Grotesk',sans-serif;margin:0 0 4px}
+h2{font:600 17px/1.2 'Space Grotesk',sans-serif;margin:28px 0 10px}
+.mut{color:var(--mut);font-size:14px}
+.dialwrap{display:grid;place-items:center;margin:18px 0 8px}
+#spin{width:min(72vw,260px);aspect-ratio:1;border-radius:50%;border:0;background:radial-gradient(circle at 35% 30%,light-dark(#fff,#1b5468),var(--card) 60%);box-shadow:0 0 0 6px var(--line),0 14px 30px #0003;color:var(--ink);font:700 22px 'Space Grotesk',sans-serif;cursor:pointer;position:relative;transition:transform .5s cubic-bezier(.2,.9,.3,1)}
+#spin::after{content:"";position:absolute;top:10%;left:50%;width:6px;height:16%;margin-left:-3px;border-radius:3px;background:var(--hot)}
+#spin:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--hot);outline-offset:3px}
+#ring{position:absolute;inset:-14px;border-radius:50%;border:4px solid var(--hot);opacity:0;pointer-events:none}
+.now{background:var(--card);border-radius:14px;padding:12px 14px;margin-top:10px}
+.now b{display:block;font:600 17px 'Space Grotesk',sans-serif}
+.tag{display:inline-block;font-size:13px;padding:2px 8px;border-radius:99px;background:var(--line);margin:6px 6px 0 0}
+.tag.warn{background:var(--hot);color:#fff}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+button,select,input,textarea{font:inherit;font-size:16px;color:var(--ink)}
+button{min-height:44px;padding:0 16px;border-radius:12px;border:2px solid var(--ink);background:transparent;cursor:pointer}
+button.pri{background:var(--hot);border-color:var(--hot);color:#fff;font-weight:600}
+button:disabled{opacity:.4}
+select,input{min-height:44px;border-radius:10px;border:2px solid var(--line);background:var(--card);padding:0 10px}
+input[type=number]{width:84px}
+textarea{width:100%;min-height:120px;border-radius:10px;border:2px solid var(--line);background:var(--card);padding:10px}
+label{font-size:14px;color:var(--mut);display:flex;gap:6px;align-items:center}
+.takes{list-style:none;padding:0;margin:0}
+.takes li{background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.takes .nm{font-size:13px;overflow-wrap:anywhere}
+.takes audio{width:100%;margin-top:6px;height:36px}
+details{background:var(--card);border-radius:12px;padding:10px 14px;margin-top:10px}
+summary{cursor:pointer;font-weight:600;min-height:28px}
+#msg{min-height:22px;font-size:14px;color:var(--mut);margin-top:6px}
+@media (prefers-reduced-motion:reduce){#spin{transition:none}}
+</style>
+</head>
+<body>
+<main>
+<h1>Spin &amp; Sample</h1>
+<div class="mut">Random live open-mic streams. Grab the last few bars as a WAV for your Octatrack, Tonverk or Loopy Pro.</div>
+
+<div class="dialwrap"><button id="spin" aria-label="Spin to a random source">SPIN<span id="ring"></span></button></div>
+
+<div class="now" id="now"><b>Not playing</b><span class="mut">Tap SPIN. The first tap also turns on audio.</span></div>
+<div id="msg" role="status"></div>
+
+<h2>Grab</h2>
+<div class="row">
+  <label>BPM <input id="bpm" type="number" min="40" max="300" step="0.1" value="122"></label>
+  <label>Bars <select id="bars"><option>1</option><option>2</option><option selected>4</option><option>8</option><option>16</option></select></label>
+  <label>Format <select id="fmt">
+    <option value="44100,16" selected>Octatrack 44.1k / 16-bit</option>
+    <option value="44100,24">Octatrack 44.1k / 24-bit</option>
+    <option value="48000,24">Tonverk 48k / 24-bit</option>
+  </select></label>
+</div>
+<div class="row">
+  <label><input id="mono" type="checkbox"> Mono</label>
+  <label><input id="norm" type="checkbox" checked> Normalize (−0.3 dB)</label>
+</div>
+<div class="row">
+  <button class="pri" id="grab" disabled>Grab last 4 bars</button>
+  <button id="rec" disabled>● Rec</button>
+  <button id="stop">Stop</button>
+</div>
+<div class="mut" style="margin-top:6px">Grab saves audio you've already heard, from the rolling buffer of the last 90 seconds. The length is exact to the sample, so the Octatrack reads the tempo correctly.</div>
+
+<h2>Takes</h2>
+<ul class="takes" id="takes"><li class="mut">No takes yet.</li></ul>
+<div class="row"><button id="credits">Copy credits log</button></div>
+
+<details>
+<summary>Sources</summary>
+<p class="mut">The Locus Sonus open-mic list loads live. Add your own streams below, one per line: <code>name | https-url | license</code>. Only https streams with CORS can be recorded here. The rest play only, so sample those on the Tonverk over USB.</p>
+<textarea id="custom" placeholder="My pond | https://example.org/pond.mp3 | CC0"></textarea>
+<div class="row"><button id="savecustom">Save sources</button><span class="mut" id="srccount"></span></div>
+</details>
+
+<details>
+<summary>Getting it into your gear</summary>
+<p><b>Octatrack:</b> share the take, choose "Save to Files", then copy it to the OT's card (AUDIO folder) in Files with a USB-C card reader.</p>
+<p><b>Loopy Pro:</b> share and pick Loopy Pro if it shows up in the share sheet. If not, save to Files and import into a clip, or copy the file in Files and paste it into Loopy.</p>
+<p><b>Tonverk, live:</b> connect the phone to the Tonverk over USB-C, sample its USB input and spin. That route needs no files at all.</p>
+<p class="mut">Safari can't send audio straight into AUM. iOS only routes audio between apps through AUv3 or inter-app audio, and a web page can't use either.</p>
+</details>
+</main>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const BUF_SECS=90;
+let ctx=null,ring=null,ringLen=0,wpos=0,filled=0,sr=48000,an=null,gainNode=null;
+let cur=null,curEl=null,curNode=null,stallT=null,recording=false,recStart=0;
+let sources=[],takes=[],log=[];
+const locusBase='https://locus.creacast.com:9001';
+
+function say(t){$('msg').textContent=t}
+function setNow(s,capture,extra){
+  $('now').innerHTML=s?`<b>${esc(s.name)}</b><span class="mut">${esc(s.credit||'')}</span><br>`+
+    `<span class="tag">${esc(s.license||'license unknown')}</span>`+
+    (capture?'<span class="tag">recordable</span>':'<span class="tag warn">play only (no CORS)</span>')+(extra||''):'<b>Not playing</b>';
+  $('grab').disabled=!capture;$('rec').disabled=!capture;
+}
+function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function initAudio(){
+  if(ctx)return;
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  sr=ctx.sampleRate;ringLen=Math.round(BUF_SECS*sr);
+  ring=[new Float32Array(ringLen),new Float32Array(ringLen)];
+  gainNode=ctx.createGain();
+  an=ctx.createAnalyser();an.fftSize=512;
+  const sp=ctx.createScriptProcessor(4096,2,2);
+  const sink=ctx.createGain();sink.gain.value=0;
+  gainNode.connect(ctx.destination);gainNode.connect(an);gainNode.connect(sp);sp.connect(sink);sink.connect(ctx.destination);
+  sp.onaudioprocess=e=>{
+    const L=e.inputBuffer.getChannelData(0),R=e.inputBuffer.numberOfChannels>1?e.inputBuffer.getChannelData(1):L;
+    for(let i=0;i<L.length;i++){ring[0][wpos]=L[i];ring[1][wpos]=R[i];wpos=(wpos+1)%ringLen}
+    filled=Math.min(ringLen,filled+L.length);
+  };
+  meter();
+}
+function meter(){
+  const d=new Uint8Array(an.fftSize);
+  const tick=()=>{an.getByteTimeDomainData(d);let p=0;for(const v of d)p=Math.max(p,Math.abs(v-128));
+    $('ring').style.opacity=Math.min(1,p/60).toFixed(2);requestAnimationFrame(tick)};tick();
+}
+
+async function loadLocus(){
+  try{
+    const r=await fetch(locusBase+'/status-json.xsl',{cache:'no-store'});
+    const j=await r.json();let src=j.icestats&&j.icestats.source;if(!src)return [];
+    if(!Array.isArray(src))src=[src];
+    return src.map(s=>{
+      const mount=(s.listenurl||'').replace(/^https?:\/\/[^/]+/,'');
+      return {name:s.server_name&&s.server_name!=='Unspecified name'?s.server_name:mount.replace('/',''),
+        url:locusBase+mount,type:s.server_type||'',credit:'Locus Sonus open mic (locusonus.org). Credit Locus Sonus when you use it.',license:'Open mic, credit Locus Sonus'}
+    }).filter(s=>s.url.length>locusBase.length);
+  }catch(e){return []}
+}
+function loadCustom(){
+  let t='';try{t=localStorage.getItem('kwel_custom')||''}catch(e){}
+  $('custom').value=t;
+  return t.split('\n').map(l=>l.split('|').map(x=>x.trim())).filter(p=>p[1]&&/^https?:/.test(p[1]))
+    .map(p=>({name:p[0]||p[1],url:p[1],license:p[2]||'license unknown',credit:'Your source'}));
+}
+async function buildSources(){
+  const a=document.createElement('audio');
+  const ogg=a.canPlayType('audio/ogg; codecs="vorbis"')!=='';
+  const locus=(await loadLocus()).filter(s=>ogg||!/ogg/.test(s.type));
+  sources=[...locus,...loadCustom()];
+  $('srccount').textContent=`${sources.length} sources (${locus.length} from Locus Sonus)`;
+  if(!locus.length)say('Couldn\'t load the Locus Sonus list here (CORS or offline). Add sources under "Sources".');
+}
+
+function stopCur(){
+  clearTimeout(stallT);
+  if(curEl){curEl.pause();curEl.removeAttribute('src');curEl.load()}
+  if(curNode){try{curNode.disconnect()}catch(e){}}
+  curEl=null;curNode=null;cur=null;
+}
+function play(s,tries){
+  stopCur();cur=s;say('Tuning: '+s.name+' …');
+  const tryOne=withCors=>{
+    const el=new Audio();curEl=el;
+    if(withCors)el.crossOrigin='anonymous';
+    el.preload='auto';el.src=s.url;
+    let ok=false;
+    stallT=setTimeout(()=>{if(!ok){say(s.name+' isn\'t answering, so skipping.');spin(tries+1)}},9000);
+    el.onplaying=()=>{ok=true;clearTimeout(stallT);
+      if(withCors){curNode=ctx.createMediaElementSource(el);curNode.connect(gainNode)}
+      setNow(s,withCors);say('');log.push({t:new Date().toISOString(),name:s.name,url:s.url,license:s.license,action:'listened'});};
+    el.onerror=()=>{clearTimeout(stallT);if(ok)return;
+      if(withCors){tryOne(false)}else{say(s.name+' won\'t play in Safari, so skipping.');spin(tries+1)}};
+    el.play().catch(()=>{});
+  };
+  tryOne(true);
+}
+function spin(tries=0){
+  initAudio();if(ctx.state==='suspended')ctx.resume();
+  if(!sources.length){say('No sources yet. Add some under "Sources".');return}
+  if(tries>8){say('Nothing played after 8 tries. Check your connection or add sources.');return}
+  const pool=sources.filter(s=>s!==cur);const s=pool[Math.floor(Math.random()*pool.length)]||sources[0];
+  const deg=360+Math.floor(Math.random()*360);$('spin').style.transform=`rotate(${deg}deg)`;
+  setTimeout(()=>{$('spin').style.transform=''},600);
+  play(s,tries);
+}
+
+function takeSecs(){return (+$('bars').value)*4*60/Math.max(40,+$('bpm').value||120)}
+function readRing(n){
+  n=Math.min(n,filled);const out=[new Float32Array(n),new Float32Array(n)];
+  let p=(wpos-n+ringLen)%ringLen;
+  for(let i=0;i<n;i++){out[0][i]=ring[0][p];out[1][i]=ring[1][p];p=(p+1)%ringLen}
+  return out;
+}
+async function render(chs,secs){
+  const [rate,bits]=$('fmt').value.split(',').map(Number);
+  const mono=$('mono').checked;
+  const inBuf=ctx.createBuffer(2,chs[0].length,sr);inBuf.copyToChannel(chs[0],0);inBuf.copyToChannel(chs[1],1);
+  const outLen=secs?Math.round(secs*rate):Math.round(chs[0].length*rate/sr);
+  const off=new OfflineAudioContext(2,outLen,rate);
+  const b=off.createBufferSource();b.buffer=inBuf;b.connect(off.destination);b.start();
+  const res=await off.startRendering();
+  let data=[res.getChannelData(0).slice(),res.getChannelData(1).slice()];
+  if(mono){const m=new Float32Array(outLen);for(let i=0;i<outLen;i++)m[i]=(data[0][i]+data[1][i])*.5;data=[m]}
+  if($('norm').checked){let pk=0;for(const c of data)for(const v of c)pk=Math.max(pk,Math.abs(v));
+    if(pk>1e-4){const g=0.966/pk;for(const c of data)for(let i=0;i<c.length;i++)c[i]*=g}}
+  const f=Math.min(Math.round(rate*.004),outLen>>2);
+  for(const c of data)for(let i=0;i<f;i++){const g=i/f;c[i]*=g;c[outLen-1-i]*=g}
+  return {blob:wav(data,rate,bits),rate,bits,mono};
+}
+function wav(chs,rate,bits){
+  const nc=chs.length,n=chs[0].length,bps=bits/8,size=n*nc*bps;
+  const buf=new ArrayBuffer(44+size),v=new DataView(buf);
+  const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  w(0,'RIFF');v.setUint32(4,36+size,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);
+  v.setUint16(22,nc,true);v.setUint32(24,rate,true);v.setUint32(28,rate*nc*bps,true);v.setUint16(32,nc*bps,true);v.setUint16(34,bits,true);
+  w(36,'data');v.setUint32(40,size,true);
+  let o=44;
+  for(let i=0;i<n;i++)for(let c=0;c<nc;c++){
+    let x=chs[c][i];
+    if(bits===16){x+= (Math.random()-Math.random())/32768;x=Math.max(-1,Math.min(1,x));v.setInt16(o,Math.round(x*32767),true);o+=2}
+    else{x=Math.max(-1,Math.min(1,x));let s=Math.round(x*8388607);if(s<0)s+=16777216;v.setUint8(o,s&255);v.setUint8(o+1,(s>>8)&255);v.setUint8(o+2,(s>>16)&255);o+=3}
+  }
+  return new Blob([buf],{type:'audio/wav'});
+}
+function slug(t){return String(t).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,28)||'source'}
+async function addTake(chs,secs,label){
+  say('Rendering …');
+  const r=await render(chs,secs);
+  const bpm=+$('bpm').value;
+  const name=`${slug(cur?cur.name:'take')}_${secs?bpm+'bpm_'+$('bars').value+'bars':'free'}_${r.rate/1000}k${r.bits}${r.mono?'_mono':''}.wav`;
+  const t={name,blob:r.blob,url:URL.createObjectURL(r.blob),src:cur};
+  takes.unshift(t);
+  log.push({t:new Date().toISOString(),name:cur?cur.name:'',url:cur?cur.url:'',license:cur?cur.license:'',action:'sampled '+label,file:name});
+  drawTakes();say('Saved '+name);
+}
+function drawTakes(){
+  $('takes').innerHTML=takes.length?takes.map((t,i)=>`<li><div class="nm">${esc(t.name)}</div><audio controls src="${t.url}"></audio>
+    <div class="row"><button class="pri" data-share="${i}">Share / Save</button><a href="${t.url}" download="${esc(t.name)}">Download</a></div></li>`).join(''):'<li class="mut">No takes yet.</li>';
+}
+async function share(i){
+  const t=takes[i];const file=new File([t.blob],t.name,{type:'audio/wav'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:t.name})}catch(e){}
+  }else{const a=document.createElement('a');a.href=t.url;a.download=t.name;document.body.appendChild(a);a.click();a.remove()}
+}
+
+$('spin').onclick=()=>spin(0);
+$('stop').onclick=()=>{stopCur();setNow(null);recording=false;$('rec').textContent='● Rec'};
+$('bars').onchange=$('bpm').oninput=()=>{$('grab').textContent=`Grab last ${$('bars').value} bar${$('bars').value==='1'?'':'s'}`};
+$('grab').onclick=()=>{
+  const secs=takeSecs();const need=Math.round(secs*sr);
+  if(need>ringLen){say('That\'s longer than the 90 s buffer. Use fewer bars or a faster BPM.');return}
+  if(filled<need){say(`Only ${(filled/sr).toFixed(1)} s heard so far. Wait or grab fewer bars.`);return}
+  addTake(readRing(need),secs,$('bars').value+' bars');
+};
+$('rec').onclick=()=>{
+  if(!recording){recording=true;recStart={w:wpos};$('rec').textContent='■ Stop rec';say('Recording (90 s max) …');return}
+  recording=false;$('rec').textContent='● Rec';
+  const n=(wpos-recStart.w+ringLen)%ringLen;if(n<sr*.1){say('Too short.');return}
+  addTake(readRing(n),0,'free rec');
+};
+$('takes').onclick=e=>{const b=e.target.closest('[data-share]');if(b)share(+b.dataset.share)};
+$('credits').onclick=async()=>{
+  const txt=log.map(l=>`${l.t}  ${l.action}  ${l.name}  ${l.url}  [${l.license}]${l.file?'  -> '+l.file:''}`).join('\n')||'Nothing logged yet.';
+  try{await navigator.clipboard.writeText(txt);say('Credits log copied.')}catch(e){say('Clipboard blocked. Here it is:\n'+txt)}
+};
+$('savecustom').onclick=()=>{try{localStorage.setItem('kwel_custom',$('custom').value)}catch(e){}buildSources();say('Sources saved.')};
+buildSources();
+}
+</script>
+</body>
+</html>
