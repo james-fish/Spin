@@ -6,7 +6,8 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      - shell: bash {0}
+        run: |
           for u in https://locus.creacast.com:9001/status-json.xsl http://locus.creacast.com:9001/status-json.xsl http://locus.creacast.com:8000/status-json.xsl https://locus.creacast.com/status-json.xsl https://locusonus.org/soundmap/ https://locusonus.org/soundmap/list/ ; do
             echo "=== $u"; curl -sS -m 15 -D - -o body -H 'Origin: https://james.fish' "$u" 2>&1 | grep -iE '^(HTTP|access-control|content-type|location|curl)' ; head -c 300 body 2>/dev/null; echo; rm -f body
           done
